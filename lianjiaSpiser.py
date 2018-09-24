@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 '''
 @Author  : minwei
-@File    : lianjiaSpiser.py
+@File    : lianjiaSpider.py
 '''
 
 import requests
@@ -19,14 +19,14 @@ headers = {
 }
 
 
-def getArea(url):
+def getArea(url, cityList):
     '''
     获取城市分区
     :param url: 城市url
     :return: 分区字典
     '''
     response = requests.get(url, headers=headers)
-    # nowurl = response.url
+
     mytree = lxml.etree.HTML(response.text)
     # 区域列表
     areaList = mytree.xpath('//div[@data-role="ershoufang"]/div[1]/a')
@@ -35,7 +35,7 @@ def getArea(url):
 
     for area in areaList:
         areaName = area.xpath('./text()')[0]
-        areaurl = "http://gz.lianjia.com" + area.xpath('./@href')[0]
+        areaurl = "http://" + cityList + ".lianjia.com" + area.xpath('./@href')[0]
         print(areaName, areaurl)
         areaDict[areaName] = areaurl
 
@@ -48,31 +48,25 @@ def getPage(url):
     :param url: 分区url
     :return: 页数
     '''
-    # url = "https://gz.lianjia.com/ershoufang/pg1/"
 
     response = requests.get(url, headers=headers)
-    # print(response.text)
 
     mytree = lxml.etree.HTML(response.text)
     # 页数
     page = mytree.xpath('//div[@class="page-box house-lst-page-box"]/@page-data')[0]
     totalPage = int(json.loads(page)['totalPage'])
-    print(totalPage)
     return totalPage
 
 
-def getHouseInfo(urlList):
+def getHouseInfo(urlList, city):
     '''
     获取房子信息
     :param urlList :区+页 url列表
     :return:
     '''
-    # url = "https://gz.lianjia.com/ershoufang/pg1/"
 
     for url in urlList:
         response = requests.get(url[1], headers=headers)
-        # print(response.text)
-
 
         mytree = lxml.etree.HTML(response.text)
 
@@ -99,48 +93,58 @@ def getHouseInfo(urlList):
             # 单价
             unitPrice = house.xpath('.//div[@class="unitPrice"]/span/text()')[0]
             print(houseImg, houseAlt, houseAddress, positionInfo, totalPrice, unitPrice)
-            # with rlock:
-            #     with open('../data/' + url[0] + '.txt', 'a+', encoding='utf-8', errors='ignore') as f:
-            #         # print(houseImg, houseAlt, houseAddress, positionInfo, totalPrice, unitPrice)
-            #         f.write(str((houseImg, houseAlt, houseAddress, positionInfo, totalPrice, unitPrice)) + '\n')
-            #         f.flush()
+            with rlock:
+                with open('./data/' + city + url[0] + '.csv', 'a+', encoding='utf-8', errors='ignore') as f:
+                    # print(houseImg, houseAlt, houseAddress, positionInfo, totalPrice, unitPrice)
+                    f.write(str((houseImg, houseAlt, houseAddress, positionInfo, totalPrice, unitPrice)) + '\n')
+                    f.flush()
 
 
 if __name__ == '__main__':
-    url = "https://gz.lianjia.com/ershoufang/pg1/"
-    areaDict = getArea(url)
-    # 全部区+url
-    newUrl = []
-    for areaName, areaUrl in areaDict.items():
-        totalPage = getPage(areaUrl)
-        for i in range(1, totalPage + 1):
-            url = areaUrl + "pg%d" % i
-            print(url)
-            newUrl.append((areaName, url))
+    '''
+    'hf',
+    '''
+    cityList = ['bj', 'cq', 'xm', 'dg', 'fs', 'gz', 'hui',
+                'sz', 'zh', 'zs', 'wh', 'lf', 'sjz', 'hk', 'zz',
+                'nj', 'su', 'wx', 'dl', 'sy', 'sh', 'cd', 'jn',
+                'qd', 'yt', 'xa', 'tj', 'hz']
+    urlList = ["http://%s.lianjia.com/ershoufang/pg1/" % (i) for i in cityList]
+    for url, city in zip(urlList, cityList):
+        areaDict = getArea(url, city)
+        # 全部区+url
+        newUrl = []
+        for areaName, areaUrl in areaDict.items():
+            try:
+                totalPage = getPage(areaUrl)
+            except Exception as e:
+                totalPage = 0
+            for i in range(1, totalPage + 1):
+                url = areaUrl + "pg%d" % i
+                print(url)
+                newUrl.append((areaName, url))
 
-    print(newUrl)
+        print(newUrl)
 
-    # 20 条线程
-    # 二维列表
-    cityAndAreaList = [[] for _ in range(20)]
+        # 20 条线程
+        # 二维列表
+        cityAndAreaList = [[] for _ in range(20)]
 
-    print(cityAndAreaList)
+        print(cityAndAreaList)
 
-    for i in range(len(newUrl)):
-        cityAndAreaList[i % 20].append(newUrl[i])
+        for i in range(len(newUrl)):
+            cityAndAreaList[i % 20].append(newUrl[i])
 
-    # 开线程
-    tList = []
-    for urlList in cityAndAreaList:
-        print(urlList)
-        print('*************************')
+        # 开线程
+        tList = []
+        for urlList in cityAndAreaList:
+            print(urlList)
+            print('*************************')
 
-        t = threading.Thread(target=getHouseInfo, args=(urlList,))
-        tList.append(t)
-        t.start()
+            t = threading.Thread(target=getHouseInfo, args=(urlList, city))
+            tList.append(t)
+            t.start()
 
-    for t in tList:
-        t.join()
+        for t in tList:
+            t.join()
 
-
-print(time.clock())
+        print(time.clock())
